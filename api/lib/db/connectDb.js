@@ -1,5 +1,7 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
+const { logger } = require('~/config');
+
 const MONGO_URI = process.env.MONGO_URI;
 
 if (!MONGO_URI) {
@@ -26,23 +28,42 @@ async function connectDb() {
   if (!cached.promise || disconnected) {
     const opts = {
       bufferCommands: false,
-      serverSelectionTimeoutMS: 30000,
-      socketTimeoutMS: 30000,
-      connectTimeoutMS: 30000,
+      serverSelectionTimeoutMS: 60000,
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 45000,
       maxPoolSize: 50,
       minPoolSize: 10,
       maxIdleTimeMS: 60000,
       retryWrites: true,
-      retryReads: true
+      retryReads: true,
+      writeConcern: {
+        w: 'majority',
+        wtimeout: 30000
+      },
+      readPreference: 'primary',
+      readConcern: { level: 'local' }
     };
 
     mongoose.set('strictQuery', true);
-    cached.promise = mongoose.connect(MONGO_URI, opts).then((mongoose) => {
-      return mongoose;
-    });
+
+    try {
+      cached.promise = mongoose.connect(MONGO_URI, opts).then((mongoose) => {
+        logger.info('Successfully connected to MongoDB');
+        return mongoose;
+      });
+    } catch (error) {
+      logger.error('Error connecting to MongoDB:', error);
+      throw error;
+    }
   }
-  cached.conn = await cached.promise;
-  return cached.conn;
+
+  try {
+    cached.conn = await cached.promise;
+    return cached.conn;
+  } catch (error) {
+    logger.error('Error establishing MongoDB connection:', error);
+    throw error;
+  }
 }
 
 module.exports = connectDb;

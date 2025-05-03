@@ -17,8 +17,7 @@ const tokenSchema = new mongoose.Schema(
     },
     expires: {
       type: Date,
-      required: true,
-      index: true
+      required: true
     },
     created: {
       type: Date,
@@ -36,9 +35,10 @@ const tokenSchema = new mongoose.Schema(
 // Создаем составной индекс для оптимизации запросов
 tokenSchema.index({ user: 1, refreshToken: 1 });
 
-// Добавляем TTL индекс для автоматического удаления просроченных токенов
+// TTL индекс для автоматического удаления просроченных токенов
 tokenSchema.index({ expires: 1 }, { expireAfterSeconds: 0 });
 
+// Создаем модель только если она еще не существует
 const Token = mongoose.models.Token || mongoose.model('Token', tokenSchema);
 
 /**
@@ -46,34 +46,34 @@ const Token = mongoose.models.Token || mongoose.model('Token', tokenSchema);
  */
 async function fixIndexes() {
   try {
-    if (
-      process.env.NODE_ENV === 'CI' ||
-      process.env.NODE_ENV === 'development' ||
-      process.env.NODE_ENV === 'test'
-    ) {
+    if (process.env.NODE_ENV === 'CI' || process.env.NODE_ENV === 'test') {
       return;
     }
-    const indexes = await Token.collection.indexes();
-    logger.debug('Existing Token Indexes:', JSON.stringify(indexes, null, 2));
-    const unwantedTTLIndexes = indexes.filter(
-      (index) => index.key.createdAt === 1 && index.expireAfterSeconds !== undefined,
-    );
-    if (unwantedTTLIndexes.length === 0) {
-      logger.debug('No unwanted Token indexes found.');
-      return;
-    }
-    for (const index of unwantedTTLIndexes) {
-      logger.debug(`Dropping unwanted Token index: ${index.name}`);
-      await Token.collection.dropIndex(index.name);
-      logger.debug(`Dropped Token index: ${index.name}`);
-    }
-    logger.debug('Token index cleanup completed successfully.');
+
+    // Увеличиваем таймаут для операции
+    await Token.collection.dropIndexes();
+    
+    // Пересоздаем индексы
+    await Promise.all([
+      Token.collection.createIndex({ refreshToken: 1 }),
+      Token.collection.createIndex({ user: 1 }),
+      Token.collection.createIndex({ created: 1 }),
+      Token.collection.createIndex({ user: 1, refreshToken: 1 }),
+      Token.collection.createIndex({ expires: 1 }, { expireAfterSeconds: 0 })
+    ]);
+
+    logger.debug('Token indexes have been successfully rebuilt');
   } catch (error) {
+    if (error.code === 26 || error.message.includes('Index build failed')) {
+      logger.warn('Token index rebuild skipped - database is locked or in use');
+      return;
+    }
     logger.error('An error occurred while fixing Token indexes:', error);
   }
 }
 
-fixIndexes();
+// Запускаем исправление индексов с задержкой
+setTimeout(fixIndexes, 5000);
 
 /**
  * Creates a new Token instance.
