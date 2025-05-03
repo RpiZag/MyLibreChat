@@ -2,7 +2,9 @@ const mongoose = require('mongoose');
 const mongoMeili = require('~/models/plugins/mongoMeili');
 const { messageSchema } = require('@librechat/data-schemas');
 
-if (process.env.MEILI_HOST && process.env.MEILI_MASTER_KEY) {
+const searchEnabled = process.env.SEARCH && process.env.SEARCH.toLowerCase() === 'true';
+
+if (searchEnabled && process.env.MEILI_HOST && process.env.MEILI_MASTER_KEY) {
   messageSchema.plugin(mongoMeili, {
     host: process.env.MEILI_HOST,
     apiKey: process.env.MEILI_MASTER_KEY,
