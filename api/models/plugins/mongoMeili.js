@@ -28,6 +28,9 @@ const meiliEnabled = process.env.MEILI_HOST && process.env.MEILI_MASTER_KEY && s
  * @throws {Error} Throws an error if any required option is missing.
  */
 const validateOptions = function (options) {
+  if (!meiliEnabled) {
+    return;
+  }
   const requiredKeys = ['host', 'apiKey', 'indexName'];
   requiredKeys.forEach((key) => {
     if (!options[key]) {
@@ -347,6 +350,10 @@ const createMeiliMongooseModel = function ({ index, attributesToIndex }) {
  * @param {string} options.primaryKey - The primary key field for indexing.
  */
 module.exports = function mongoMeili(schema, options) {
+  if (!meiliEnabled) {
+    return;
+  }
+  
   validateOptions(options);
 
   // Add _meiliIndex field to the schema to track if a document has been indexed in MeiliSearch.
