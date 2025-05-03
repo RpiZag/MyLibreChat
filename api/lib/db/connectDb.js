@@ -33,7 +33,6 @@ async function connectDb() {
       connectTimeoutMS: 60000,
       maxPoolSize: 50,
       minPoolSize: 10,
-      maxIdleTimeMS: 60000,
       retryWrites: true,
       retryReads: true,
       writeConcern: {
@@ -41,14 +40,7 @@ async function connectDb() {
         wtimeout: 30000
       },
       readPreference: 'primary',
-      readConcern: { level: 'local' },
-      autoIndex: true,
-      autoCreate: true,
-      keepAlive: true,
-      keepAliveInitialDelay: 300000,
-      heartbeatFrequencyMS: 10000,
-      serverSelectionTimeoutMS: 60000,
-      family: 4
+      readConcern: { level: 'local' }
     };
 
     mongoose.set('strictQuery', true);
@@ -61,6 +53,8 @@ async function connectDb() {
       });
     } catch (error) {
       logger.error('Error connecting to MongoDB:', error);
+      cached.conn = null;
+      cached.promise = null;
       throw error;
     }
   }
