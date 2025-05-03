@@ -1,13 +1,46 @@
 const mongoose = require('mongoose');
 const { encryptV2 } = require('~/server/utils/crypto');
-const { tokenSchema } = require('@librechat/data-schemas');
 const { logger } = require('~/config');
 
-/**
- * Token model.
- * @type {mongoose.Model}
- */
-const Token = mongoose.model('Token', tokenSchema);
+const tokenSchema = new mongoose.Schema(
+  {
+    refreshToken: {
+      type: String,
+      required: true,
+      index: true
+    },
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      index: true
+    },
+    expires: {
+      type: Date,
+      required: true,
+      index: true
+    },
+    created: {
+      type: Date,
+      default: Date.now,
+      index: true
+    },
+    revoked: {
+      type: Boolean,
+      default: false
+    }
+  },
+  { timestamps: true }
+);
+
+// Создаем составной индекс для оптимизации запросов
+tokenSchema.index({ user: 1, refreshToken: 1 });
+
+// Добавляем TTL индекс для автоматического удаления просроченных токенов
+tokenSchema.index({ expires: 1 }, { expireAfterSeconds: 0 });
+
+const Token = mongoose.models.Token || mongoose.model('Token', tokenSchema);
+
 /**
  * Fixes the indexes for the Token collection from legacy TTL indexes to the new expiresAt index.
  */
