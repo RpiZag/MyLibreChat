@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { encryptV2 } = require('~/server/utils/crypto');
 const { logger } = require('~/config');
+const connectDb = require('~/lib/db/connectDb');
 
 const tokenSchema = new mongoose.Schema(
   {
@@ -50,30 +51,36 @@ async function fixIndexes() {
       return;
     }
 
-    // Увеличиваем таймаут для операции
-    await Token.collection.dropIndexes();
+    // Ждем подключения к MongoDB
+    await connectDb();
     
-    // Пересоздаем индексы
-    await Promise.all([
-      Token.collection.createIndex({ refreshToken: 1 }),
-      Token.collection.createIndex({ user: 1 }),
-      Token.collection.createIndex({ created: 1 }),
-      Token.collection.createIndex({ user: 1, refreshToken: 1 }),
-      Token.collection.createIndex({ expires: 1 }, { expireAfterSeconds: 0 })
-    ]);
+    logger.info('Starting Token index rebuild...');
 
-    logger.debug('Token indexes have been successfully rebuilt');
-  } catch (error) {
-    if (error.code === 26 || error.message.includes('Index build failed')) {
-      logger.warn('Token index rebuild skipped - database is locked or in use');
-      return;
+    try {
+      // Пересоздаем индексы по одному
+      await Token.collection.createIndex({ refreshToken: 1 });
+      await Token.collection.createIndex({ user: 1 });
+      await Token.collection.createIndex({ created: 1 });
+      await Token.collection.createIndex({ user: 1, refreshToken: 1 });
+      await Token.collection.createIndex({ expires: 1 }, { expireAfterSeconds: 0 });
+
+      logger.info('Token indexes have been successfully rebuilt');
+    } catch (indexError) {
+      if (indexError.code === 26 || indexError.message.includes('Index build failed')) {
+        logger.warn('Token index rebuild skipped - database is locked or in use');
+        return;
+      }
+      throw indexError;
     }
+  } catch (error) {
     logger.error('An error occurred while fixing Token indexes:', error);
   }
 }
 
-// Запускаем исправление индексов с задержкой
-setTimeout(fixIndexes, 5000);
+// Запускаем исправление индексов с задержкой после подключения
+mongoose.connection.once('connected', () => {
+  setTimeout(fixIndexes, 5000);
+});
 
 /**
  * Creates a new Token instance.

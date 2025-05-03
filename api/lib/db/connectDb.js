@@ -27,10 +27,10 @@ async function connectDb() {
   const disconnected = cached.conn && cached.conn?._readyState !== 1;
   if (!cached.promise || disconnected) {
     const opts = {
-      bufferCommands: false,
+      bufferCommands: true,
       serverSelectionTimeoutMS: 60000,
-      socketTimeoutMS: 45000,
-      connectTimeoutMS: 45000,
+      socketTimeoutMS: 60000,
+      connectTimeoutMS: 60000,
       maxPoolSize: 50,
       minPoolSize: 10,
       maxIdleTimeMS: 60000,
@@ -41,12 +41,20 @@ async function connectDb() {
         wtimeout: 30000
       },
       readPreference: 'primary',
-      readConcern: { level: 'local' }
+      readConcern: { level: 'local' },
+      autoIndex: true,
+      autoCreate: true,
+      keepAlive: true,
+      keepAliveInitialDelay: 300000,
+      heartbeatFrequencyMS: 10000,
+      serverSelectionTimeoutMS: 60000,
+      family: 4
     };
 
     mongoose.set('strictQuery', true);
 
     try {
+      logger.info('Connecting to MongoDB...');
       cached.promise = mongoose.connect(MONGO_URI, opts).then((mongoose) => {
         logger.info('Successfully connected to MongoDB');
         return mongoose;
@@ -62,8 +70,22 @@ async function connectDb() {
     return cached.conn;
   } catch (error) {
     logger.error('Error establishing MongoDB connection:', error);
+    cached.conn = null;
+    cached.promise = null;
     throw error;
   }
 }
+
+mongoose.connection.on('error', (err) => {
+  logger.error('MongoDB connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  logger.warn('MongoDB disconnected. Attempting to reconnect...');
+});
+
+mongoose.connection.on('reconnected', () => {
+  logger.info('MongoDB reconnected');
+});
 
 module.exports = connectDb;
